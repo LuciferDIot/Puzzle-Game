@@ -9,9 +9,10 @@ public class ObjectSpawner : MonoBehaviour
     public int numRows = 10;
     public int numColumns = 10;
     private bool isObjectMoving = false;
+    private static List<float> resultIndexes = new List<float>();
 
     // Dictionary to store objects based on their column number
-    public Dictionary<int, Dictionary<float, GameObject>> columnObjectsDictionary = new Dictionary<int, Dictionary<float, GameObject>>();
+    public Dictionary<float, Dictionary<float, GameObject>> columnObjectsDictionary = new Dictionary<float, Dictionary<float, GameObject>>();
 
     void Start()
     {
@@ -81,8 +82,23 @@ public class ObjectSpawner : MonoBehaviour
                 }
             }
         }
-        SortObjectsInColumns();
+        
+        Invoke("ExecuteAfterDelay", 2f);
     }
+
+    private void ExecuteAfterDelay()
+    {
+        SortObjectsInColumns();
+        Dictionary<float, List<float>> array = FindConsecutiveOccurrences(columnObjectsDictionary);
+        foreach (var item in array)
+        {
+            for (int i = 0; i < item.Value.Count; i++)
+            {
+                Debug.Log("Column: " + item.Key + " ,Row: " + item.Value[i]);
+            }
+        }
+    }
+
     private IEnumerator MoveObjectGradually(GameObject obj, Vector3 targetPosition, float duration, float column, float row)
     {
         float elapsedTime = 0f;
@@ -153,5 +169,67 @@ public class ObjectSpawner : MonoBehaviour
 
     public bool ObjectMoving(){
         return isObjectMoving;
+    }
+
+    static Dictionary<float, List<float>> FindConsecutiveOccurrences(Dictionary<float, Dictionary<float, GameObject>> table)
+    {
+        Dictionary<float, List<float>> resultDictionary = new Dictionary<float, List<float>>();
+
+        Dictionary<float, Dictionary<float, GameObject>> rawsDictionary = rowsToColumns(table);
+
+        foreach (var columnDic in rawsDictionary)
+        {
+            float columnKey = columnDic.Key;
+            HashSet<float> uniqueRows = new HashSet<float>();
+
+            foreach (var rowDic in columnDic.Value)
+            {
+                for (float i = rowDic.Key - 1; i <= rowDic.Key + 1; i++)
+                {
+                    if (columnDic.Value.ContainsKey(i - 1) && columnDic.Value.ContainsKey(i + 1)){
+                        Debug.Log((i-1)+" "+i+" "+i+1);
+                        if(columnDic.Value[i - 1].CompareTag(columnDic.Value[i].tag) && columnDic.Value[i].CompareTag(columnDic.Value[i + 1].tag))
+                        {
+                            uniqueRows.Add(i - 1);
+                            uniqueRows.Add(i);
+                            uniqueRows.Add(i + 1);
+                        }
+                    }
+                }
+            }
+
+            resultDictionary.Add(columnKey, uniqueRows.ToList());
+        }
+
+        return resultDictionary;
+    }
+
+
+
+
+    static Dictionary<float, Dictionary<float, GameObject>> rowsToColumns(Dictionary<float, Dictionary<float, GameObject>> table)
+    {
+        Dictionary<float, Dictionary<float, GameObject>> result = new Dictionary<float, Dictionary<float, GameObject>>();
+
+        foreach (var column in table)
+        {
+            foreach (var row in column.Value)
+            {
+                float rowNum = row.Key;
+                float columnNum = column.Key;
+                GameObject gameObject = row.Value;
+
+                if (!result.ContainsKey(rowNum))
+                {
+                    // If the result dictionary does not contain the row number, add it
+                    result[rowNum] = new Dictionary<float, GameObject>();
+                }
+
+                // Add the column number and GameObject to the result dictionary
+                result[rowNum].Add(columnNum, gameObject);
+            }
+        }
+
+        return result;
     }
 }
