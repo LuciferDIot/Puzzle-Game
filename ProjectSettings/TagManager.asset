@@ -4,6 +4,10 @@
 TagManager:
   serializedVersion: 2
   tags:
+  - ClickableObject
+  - Capsule
+  - Cube
+  - Cylinder
   - Sphere
   layers:
   - Default

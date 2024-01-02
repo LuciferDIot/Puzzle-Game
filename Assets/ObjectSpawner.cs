@@ -49,11 +49,13 @@ public class ObjectSpawner : MonoBehaviour
 
     public void MoveObjectsDown(float column, float row)
     {
-        if (!isObjectMoving)
+        Dictionary<float, GameObject> columnObjects = columnObjectsDictionary[Mathf.RoundToInt(column)];
+        
+        if (!isObjectMoving && columnObjects.Last().Key!=row-1)
         {
             isObjectMoving = true;
-                // Get the column dictionary
-            Dictionary<float, GameObject> columnObjects = columnObjectsDictionary[Mathf.RoundToInt(column)];
+
+            var lastKeyValuePairByKey = columnObjects.OrderBy(kv => kv.Key).Last();
 
             // Iterate through rows above the specified row
             for (float currentRow = row + 1; currentRow <= numRows / 2; currentRow++)
@@ -75,14 +77,12 @@ public class ObjectSpawner : MonoBehaviour
                         // Update the dictionary with the new row value
                         columnObjectsDictionary[Mathf.RoundToInt(column)].Remove(currentRow);
                         columnObjectsDictionary[Mathf.RoundToInt(column)][currentRow - 1] = currentObject;
-
                     }
                 }
             }
         }
+        SortObjectsInColumns();
     }
-
-    // Coroutine to move the object gradually
     private IEnumerator MoveObjectGradually(GameObject obj, Vector3 targetPosition, float duration, float column, float row)
     {
         float elapsedTime = 0f;
@@ -99,77 +99,14 @@ public class ObjectSpawner : MonoBehaviour
         isObjectMoving = false;
 
 
-        CheckAndDestroy(column, row);
     }
 
 
     public void RemoveElementInDictionary(float column, float row)
     {
+        Debug.Log("Warning: Removing element");
         Dictionary<float, GameObject> rowDictionary = columnObjectsDictionary[Mathf.RoundToInt(column)];
         rowDictionary.Remove(row);
-    }
-
-    private void CheckAndDestroy(float column, float row)
-    {
-        var limit = 3;
-        Dictionary<float, GameObject> rowDictionary = new();
-
-        if (columnObjectsDictionary[Mathf.RoundToInt(column)].ContainsKey(row))
-        {
-            foreach (var columnVar in columnObjectsDictionary)
-            {
-                rowDictionary[columnVar.Key] = columnVar.Value[row];
-            }
-
-            List<float> sameTypeIndex = GetRowNumberOfSameType(rowDictionary);
-            for (int i = 0; i < sameTypeIndex.Count; i++)
-            {
-                Destroy(rowDictionary[sameTypeIndex[i]]);
-            }
-        }
-    }
-
-
-    private List<float> GetRowNumberOfSameType(Dictionary<float, GameObject> rowDictionary)
-    {
-        List<float> rowIndexes = new();
-
-        var previousIndex = 100;
-        var typesCount = 0;
-
-        for (int rowIndex = -4; rowIndex < 6; rowIndex++)
-        {
-            if (rowDictionary.ContainsKey(rowIndex) && previousIndex != 100)
-            {
-                GameObject previousObject = rowDictionary[previousIndex];
-                GameObject currentObject = rowDictionary[rowIndex];
-
-                if (previousObject != null && currentObject != null && currentObject.CompareTag(previousObject.tag))
-                {
-                    typesCount++;
-                }
-                else
-                {
-                    if (typesCount > 1)
-                    {
-                        for (int i = rowIndex - 1; typesCount > 0; i--)
-                        {
-                            rowIndexes.Add(i);
-                            typesCount--;
-                        }
-                    }
-
-                    // Reset typesCount when a mismatch occurs
-                    typesCount = 0;
-                }
-            }
-
-            // Move this outside the loop to properly update previousIndex
-            if (rowDictionary.ContainsKey(rowIndex)) 
-                previousIndex = rowIndex;
-        }
-
-        return rowIndexes;
     }
 
 
