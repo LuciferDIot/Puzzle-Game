@@ -18,4 +18,6 @@ public class ClickableObject : MonoBehaviour
             objectSpawner.MoveObjectsDown(this.transform.position.x, this.transform.position.y);
         }
     }
+
+    
 }

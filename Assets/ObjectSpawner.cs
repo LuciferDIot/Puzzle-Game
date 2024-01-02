@@ -70,11 +70,12 @@ public class ObjectSpawner : MonoBehaviour
                         Vector3 newPosition = new Vector3(column, currentRow - 1, 0f);
 
                         // Move the object gradually (you can adjust the speed as needed)
-                        StartCoroutine(MoveObjectGradually(currentObject, newPosition, 0.5f));
+                        StartCoroutine(MoveObjectGradually(currentObject, newPosition, 0.5f, column, row));
 
                         // Update the dictionary with the new row value
                         columnObjectsDictionary[Mathf.RoundToInt(column)].Remove(currentRow);
                         columnObjectsDictionary[Mathf.RoundToInt(column)][currentRow - 1] = currentObject;
+
                     }
                 }
             }
@@ -82,7 +83,7 @@ public class ObjectSpawner : MonoBehaviour
     }
 
     // Coroutine to move the object gradually
-    private IEnumerator MoveObjectGradually(GameObject obj, Vector3 targetPosition, float duration)
+    private IEnumerator MoveObjectGradually(GameObject obj, Vector3 targetPosition, float duration, float column, float row)
     {
         float elapsedTime = 0f;
         Vector3 startingPos = obj.transform.position;
@@ -96,6 +97,9 @@ public class ObjectSpawner : MonoBehaviour
 
         obj.transform.position = targetPosition;
         isObjectMoving = false;
+
+
+        CheckAndDestroy(column, row);
     }
 
 
@@ -104,6 +108,70 @@ public class ObjectSpawner : MonoBehaviour
         Dictionary<float, GameObject> rowDictionary = columnObjectsDictionary[Mathf.RoundToInt(column)];
         rowDictionary.Remove(row);
     }
+
+    private void CheckAndDestroy(float column, float row)
+    {
+        var limit = 3;
+        Dictionary<float, GameObject> rowDictionary = new();
+
+        if (columnObjectsDictionary[Mathf.RoundToInt(column)].ContainsKey(row))
+        {
+            foreach (var columnVar in columnObjectsDictionary)
+            {
+                rowDictionary[columnVar.Key] = columnVar.Value[row];
+            }
+
+            List<float> sameTypeIndex = GetRowNumberOfSameType(rowDictionary);
+            for (int i = 0; i < sameTypeIndex.Count; i++)
+            {
+                Destroy(rowDictionary[sameTypeIndex[i]]);
+            }
+        }
+    }
+
+
+    private List<float> GetRowNumberOfSameType(Dictionary<float, GameObject> rowDictionary)
+    {
+        List<float> rowIndexes = new();
+
+        var previousIndex = 100;
+        var typesCount = 0;
+
+        for (int rowIndex = -4; rowIndex < 6; rowIndex++)
+        {
+            if (rowDictionary.ContainsKey(rowIndex) && previousIndex != 100)
+            {
+                GameObject previousObject = rowDictionary[previousIndex];
+                GameObject currentObject = rowDictionary[rowIndex];
+
+                if (previousObject != null && currentObject != null && currentObject.CompareTag(previousObject.tag))
+                {
+                    typesCount++;
+                }
+                else
+                {
+                    if (typesCount > 1)
+                    {
+                        for (int i = rowIndex - 1; typesCount > 0; i--)
+                        {
+                            rowIndexes.Add(i);
+                            typesCount--;
+                        }
+                    }
+
+                    // Reset typesCount when a mismatch occurs
+                    typesCount = 0;
+                }
+            }
+
+            // Move this outside the loop to properly update previousIndex
+            if (rowDictionary.ContainsKey(rowIndex)) 
+                previousIndex = rowIndex;
+        }
+
+        return rowIndexes;
+    }
+
 
     private void SortObjectsInColumns()
     {
@@ -141,7 +209,7 @@ public class ObjectSpawner : MonoBehaviour
         {
             foreach (var rowEntry in kvp.Value)
             {
-                Debug.Log(kvp.Key + "  " + rowEntry.Key);
+                Debug.Log("column: "+kvp.Key + "  row: " + rowEntry.Key);
             }
         }
     }
