@@ -44,16 +44,20 @@ public class ObjectSpawner : MonoBehaviour
         StartCoroutine(RemoveObject(result));
         StartCoroutine(AdjustColumnObjects(columnObjectsDictionary));
     }
+    
 
     private IEnumerator RemoveObject(Dictionary<float, List<float>> result){
+        int count = 0;
         foreach (var YAxisPair in result)
         {
             float YAxisValue = YAxisPair.Key;
             foreach (var XAxisValue in YAxisPair.Value)
             {
                 StartCoroutine(RemoveElementInDictionary(XAxisValue, YAxisValue));
+                count++;
             }
         }
+        if (count>0) Debug.Log("Destroyed Count: "+count);
         yield return null;
     }
 
@@ -269,6 +273,18 @@ public class ObjectSpawner : MonoBehaviour
                             uniqueRows.Add(XAxis - 1);
                             uniqueRows.Add(XAxis);
                             uniqueRows.Add(XAxis + 1);
+                            
+                            foreach (int rowIndex in uniqueRows.Select(v => (int)v))
+                            {
+                                Renderer renderer = columnDicY.Value[rowIndex].GetComponent<Renderer>();
+                                if (renderer != null)
+                                {
+                                    // Assuming the material has an alpha property
+                                    Color currentColor = renderer.material.color;
+                                    currentColor = Color.blue;
+                                    renderer.material.color = currentColor;
+                                }
+                            }
                         }
                     }
                 }
