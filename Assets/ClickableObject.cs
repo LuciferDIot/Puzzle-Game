@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 public class ClickableObject : MonoBehaviour
@@ -6,17 +7,12 @@ public class ClickableObject : MonoBehaviour
 
     void OnMouseDown()
     {
-        if (!objectSpawner.ObjectMoving() 
-        // && this.CompareTag("ClickableObject")
-        )
+        if (!objectSpawner.ObjectMoving())
         {
-            // Destroy the clicked object
-            Destroy(gameObject);
-
-            // Move the objects above down
-            objectSpawner.RemoveElementInDictionary(this.transform.position.x, this.transform.position.y);
-            objectSpawner.MoveObjectsDown(this.transform.position.x, this.transform.position.y);
+            StartCoroutine(objectSpawner.RemoveElementInDictionary(this.transform.position.x, this.transform.position.y));
+            StartCoroutine(objectSpawner.MoveObjectsDown(this.transform.position.x, this.transform.position.y));
         }
+        
     }
 
     

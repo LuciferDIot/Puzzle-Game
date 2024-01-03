@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using UnityEngine;
 
 public class ObjectSpawner : MonoBehaviour
@@ -8,8 +9,9 @@ public class ObjectSpawner : MonoBehaviour
     public GameObject[] objectPrefabs; // Array of object prefabs to spawn
     public int numRows = 10;
     public int numColumns = 10;
-    private bool isObjectMoving = false;
-    private static List<float> resultIndexes = new List<float>();
+    private readonly float firstRow = -4f;
+    private static bool isObjectMoving = false;
+    private static bool stillChecking = false;
 
     // Dictionary to store objects based on their column number
     public Dictionary<float, Dictionary<float, GameObject>> columnObjectsDictionary = new Dictionary<float, Dictionary<float, GameObject>>();
@@ -21,20 +23,100 @@ public class ObjectSpawner : MonoBehaviour
         // PrintObjectsInDictionary();
     }
 
+    void Update()
+    {
+        SortObjectsInColumns();
+        
+        if (!stillChecking)
+        {
+            StartCoroutine(UpdateCoroutine());
+        }
+    }
+
+    private IEnumerator UpdateCoroutine()
+    {
+        Task<Dictionary<float, List<float>>> findConsecutiveTask = FindConsecutiveOccurrences(columnObjectsDictionary);
+
+        yield return new WaitUntil(() => findConsecutiveTask.IsCompleted);
+
+        Dictionary<float, List<float>> result = findConsecutiveTask.Result;
+
+        StartCoroutine(RemoveObject(result));
+        StartCoroutine(AdjustColumnObjects(columnObjectsDictionary));
+    }
+
+    private IEnumerator RemoveObject(Dictionary<float, List<float>> result){
+        foreach (var YAxisPair in result)
+        {
+            float YAxisValue = YAxisPair.Key;
+            foreach (var XAxisValue in YAxisPair.Value)
+            {
+                StartCoroutine(RemoveElementInDictionary(XAxisValue, YAxisValue));
+            }
+        }
+        yield return null;
+    }
+
+    private IEnumerator AdjustColumnObjects(Dictionary<float, Dictionary<float, GameObject>> columnObjects)
+    {
+        stillChecking = true;
+        foreach (var X in columnObjects.Keys.ToList())
+        {
+            float previousY = columnObjects[X].Any() ? columnObjects[X].First().Key : 5f;
+
+            foreach (var Y in columnObjects[X].Keys.ToList())
+            {
+                float currentY = Y;
+                GameObject currentObject = columnObjects[X][Y];
+
+                if (currentY > previousY + 1 && currentObject!=null)
+                {
+                    Vector3 newPosition = new(X, previousY + 1, 0f);
+                    StartCoroutine(MoveObjectGradually(currentObject, newPosition, 0.5f));
+
+                    // Update the dictionary with the new row value
+                    columnObjects[X].Remove(currentY);
+                    columnObjects[X][previousY + 1] = currentObject;
+                }
+                else if (currentObject==null)
+                {
+                    columnObjects[X].Remove(currentY);
+                }
+
+
+                if (previousY != firstRow && !columnObjects[X].Keys.ToList().Contains(firstRow))
+                {
+                    Vector3 newPosition = new(X, firstRow, 0f);
+                    StartCoroutine(MoveObjectGradually(currentObject, newPosition, 0.5f));
+
+                    // Update the dictionary with the new row value
+                    columnObjects[X].Remove(currentY);
+                    columnObjects[X][firstRow] = currentObject;
+                }
+
+                previousY = Y;
+            }
+        }
+        stillChecking = false;
+        yield return null;
+    }
+
+
+
     void SpawnObjectsOnTable()
     {
         for (int row = 0; row < numRows; row++)
         {
             for (int col = 0; col < numColumns; col++)
             {
-                int columnKey = numColumns / 2 - col;
-                int rowKey = numRows / 2 - row;
+                int columnKeyX = numColumns / 2 - col;
+                int rowKeyY = numRows / 2 - row;
 
                 // Randomly select an object prefab from the array
                 GameObject selectedPrefab = objectPrefabs[Random.Range(0, objectPrefabs.Length)];
 
                 // Calculate the position for the new object
-                Vector3 spawnPosition = new Vector3(columnKey, rowKey, 0f);
+                Vector3 spawnPosition = new Vector3(columnKeyX, rowKeyY, 0f);
 
                 // Instantiate the object at the calculated position
                 GameObject spawnedObject = Instantiate(selectedPrefab, spawnPosition, Quaternion.identity);
@@ -43,12 +125,12 @@ public class ObjectSpawner : MonoBehaviour
                 ClickableObject clickableObject = spawnedObject.AddComponent<ClickableObject>();
                 clickableObject.objectSpawner = this;
 
-                StoreObjectInDictionary(columnKey, rowKey, spawnedObject);
+                StoreObjectInDictionary(columnKeyX, rowKeyY, spawnedObject);
             }
         }
     }
 
-    public void MoveObjectsDown(float column, float row)
+    public IEnumerator MoveObjectsDown(float column, float row)
     {
         Dictionary<float, GameObject> columnObjects = columnObjectsDictionary[Mathf.RoundToInt(column)];
         
@@ -73,7 +155,7 @@ public class ObjectSpawner : MonoBehaviour
                         Vector3 newPosition = new Vector3(column, currentRow - 1, 0f);
 
                         // Move the object gradually (you can adjust the speed as needed)
-                        StartCoroutine(MoveObjectGradually(currentObject, newPosition, 0.5f, column, row));
+                        StartCoroutine(MoveObjectGradually(currentObject, newPosition, 0.5f));
 
                         // Update the dictionary with the new row value
                         columnObjectsDictionary[Mathf.RoundToInt(column)].Remove(currentRow);
@@ -83,46 +165,40 @@ public class ObjectSpawner : MonoBehaviour
             }
         }
         
-        Invoke("ExecuteAfterDelay", 2f);
+        yield return null;
     }
 
-    private void ExecuteAfterDelay()
-    {
-        SortObjectsInColumns();
-        Dictionary<float, List<float>> array = FindConsecutiveOccurrences(columnObjectsDictionary);
-        foreach (var item in array)
-        {
-            for (int i = 0; i < item.Value.Count; i++)
-            {
-                Debug.Log("Column: " + item.Key + " ,Row: " + item.Value[i]);
-            }
-        }
-    }
 
-    private IEnumerator MoveObjectGradually(GameObject obj, Vector3 targetPosition, float duration, float column, float row)
+    private IEnumerator MoveObjectGradually(GameObject obj, Vector3 targetPosition, float duration)
     {
         float elapsedTime = 0f;
         Vector3 startingPos = obj.transform.position;
 
         while (elapsedTime < duration)
         {
-            obj.transform.position = Vector3.Lerp(startingPos, targetPosition, elapsedTime / duration);
-            elapsedTime += Time.deltaTime;
+            if (obj!=null)
+            {
+                obj.transform.position = Vector3.Lerp(startingPos, targetPosition, elapsedTime / duration);
+                elapsedTime += Time.deltaTime;
+            }
             yield return null;
         }
 
         obj.transform.position = targetPosition;
         isObjectMoving = false;
-
-
     }
 
 
-    public void RemoveElementInDictionary(float column, float row)
+    public IEnumerator RemoveElementInDictionary(float column, float row)
     {
-        Debug.Log("Warning: Removing element");
         Dictionary<float, GameObject> rowDictionary = columnObjectsDictionary[Mathf.RoundToInt(column)];
+        if (rowDictionary.ContainsKey(row) && rowDictionary[row]!=null)
+        {
+            Destroy(rowDictionary[row]);
+        }
         rowDictionary.Remove(row);
+        
+        yield return null;
     }
 
 
@@ -142,17 +218,17 @@ public class ObjectSpawner : MonoBehaviour
     }
 
 
-    private void StoreObjectInDictionary(int column, float row, GameObject obj)
+    private void StoreObjectInDictionary(float columnX, float rowY, GameObject obj)
     {
         // Check if the column key exists in the dictionary
-        if (!columnObjectsDictionary.ContainsKey(column))
+        if (!columnObjectsDictionary.ContainsKey(columnX))
         {
             // If not, add a new dictionary for the column
-            columnObjectsDictionary[column] = new Dictionary<float, GameObject>();
+            columnObjectsDictionary[columnX] = new Dictionary<float, GameObject>();
         }
 
         // Add the object to the dictionary corresponding to its column and row
-        columnObjectsDictionary[column][row] = obj;
+        columnObjectsDictionary[columnX][rowY] = obj;
     }
 
     private void PrintObjectsInDictionary()
@@ -171,62 +247,65 @@ public class ObjectSpawner : MonoBehaviour
         return isObjectMoving;
     }
 
-    static Dictionary<float, List<float>> FindConsecutiveOccurrences(Dictionary<float, Dictionary<float, GameObject>> table)
+    private Task<Dictionary<float, List<float>>> FindConsecutiveOccurrences(Dictionary<float, Dictionary<float, GameObject>> table)
     {
-        Dictionary<float, List<float>> resultDictionary = new Dictionary<float, List<float>>();
+        Dictionary<float, List<float>> resultDictionary = new();
 
-        Dictionary<float, Dictionary<float, GameObject>> rawsDictionary = rowsToColumns(table);
+        Dictionary<float, Dictionary<float, GameObject>> rawsDictionary = RowsToColumns(table);
 
-        foreach (var columnDic in rawsDictionary)
+        foreach (var columnDicY in rawsDictionary)
         {
-            float columnKey = columnDic.Key;
-            HashSet<float> uniqueRows = new HashSet<float>();
+            float YAxis = columnDicY.Key;
+            HashSet<float> uniqueRows = new();
 
-            foreach (var rowDic in columnDic.Value)
+            foreach (var rowDicX in columnDicY.Value)
             {
-                for (float i = rowDic.Key - 1; i <= rowDic.Key + 1; i++)
+                for (float XAxis = rowDicX.Key - 1; XAxis <= rowDicX.Key + 1; XAxis++)
                 {
-                    if (columnDic.Value.ContainsKey(i - 1) && columnDic.Value.ContainsKey(i + 1)){
-                        Debug.Log((i-1)+" "+i+" "+i+1);
-                        if(columnDic.Value[i - 1].CompareTag(columnDic.Value[i].tag) && columnDic.Value[i].CompareTag(columnDic.Value[i + 1].tag))
+                    if (columnDicY.Value.ContainsKey(XAxis - 1) && columnDicY.Value.ContainsKey(XAxis + 1) && columnDicY.Value.ContainsKey(XAxis)){
+                        if(columnDicY.Value[XAxis - 1].CompareTag(columnDicY.Value[XAxis].tag) && columnDicY.Value[XAxis].CompareTag(columnDicY.Value[XAxis + 1].tag))
                         {
-                            uniqueRows.Add(i - 1);
-                            uniqueRows.Add(i);
-                            uniqueRows.Add(i + 1);
+
+                            uniqueRows.Add(XAxis - 1);
+                            uniqueRows.Add(XAxis);
+                            uniqueRows.Add(XAxis + 1);
                         }
                     }
                 }
             }
 
-            resultDictionary.Add(columnKey, uniqueRows.ToList());
+            resultDictionary.Add(YAxis, uniqueRows.ToList());
         }
+        
+        Task<Dictionary<float, List<float>>> completedTask = Task.FromResult(resultDictionary);
 
-        return resultDictionary;
+        return completedTask;
+
     }
 
 
 
 
-    static Dictionary<float, Dictionary<float, GameObject>> rowsToColumns(Dictionary<float, Dictionary<float, GameObject>> table)
+    static Dictionary<float, Dictionary<float, GameObject>> RowsToColumns(Dictionary<float, Dictionary<float, GameObject>> table)
     {
         Dictionary<float, Dictionary<float, GameObject>> result = new Dictionary<float, Dictionary<float, GameObject>>();
 
-        foreach (var column in table)
+        foreach (var columnX in table)
         {
-            foreach (var row in column.Value)
+            foreach (var rowY in columnX.Value)
             {
-                float rowNum = row.Key;
-                float columnNum = column.Key;
-                GameObject gameObject = row.Value;
+                float rowNumY = rowY.Key;
+                float columnNumX = columnX.Key;
+                GameObject gameObject = rowY.Value;
 
-                if (!result.ContainsKey(rowNum))
+                if (!result.ContainsKey(rowNumY))
                 {
                     // If the result dictionary does not contain the row number, add it
-                    result[rowNum] = new Dictionary<float, GameObject>();
+                    result[rowNumY] = new Dictionary<float, GameObject>();
                 }
 
                 // Add the column number and GameObject to the result dictionary
-                result[rowNum].Add(columnNum, gameObject);
+                result[rowNumY].Add(columnNumX, gameObject);
             }
         }
 
